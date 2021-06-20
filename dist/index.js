@@ -809,6 +809,7 @@ function wrapCode(magicString, uses, moduleName, exportsName) {
     passedArgs.push(moduleName);
   }
   if (uses.exports) {
+    // bway
     args.push('exports');
     passedArgs.push(exportsName);
   }
@@ -848,11 +849,21 @@ function rewriteExportsAndGetExportsBlock(
       exportsName
     );
   } else {
-    exports.push(`${exportsName} as __moduleExports`);
+    // bway
+    // wrapped === true 表示需使用以下方式解析程式碼
+    //     (function (module, exports) {
+    //       ...
+    //     }(theModule, theExports));`
+    let newExportsName = exportsName;
+    if (exportMode === 'module') {
+      newExportsName += '_moduleExports';
+      exportDeclarations.push(`var ${newExportsName} = ${moduleName}.exports;`);
+    }
+    exports.push(`${newExportsName} as __moduleExports`);
     if (wrapped) {
       getExportsWhenWrapping(
         exportDeclarations,
-        exportsName,
+        newExportsName,
         detectWrappedDefault,
         HELPERS_NAME,
         defaultIsModuleExports
@@ -867,7 +878,7 @@ function rewriteExportsAndGetExportsBlock(
         deconflictedExportNames,
         topLevelAssignments,
         moduleName,
-        exportsName,
+        newExportsName,
         defineCompiledEsmExpressions,
         HELPERS_NAME,
         defaultIsModuleExports
@@ -1108,6 +1119,7 @@ function getRequireHandlers() {
     const imports = [];
     imports.push(`import * as ${helpersName} from "${HELPERS_ID}";`);
     if (exportMode === 'module') {
+      // bway
       imports.push(
         `import { __module as ${moduleName}, exports as ${exportsName} } from ${JSON.stringify(
           wrapId(id, MODULE_SUFFIX)
@@ -1651,6 +1663,7 @@ function transformCommonjs(
     wrapCode(magicString, uses, moduleName, exportsName);
   }
 
+  // bway
   magicString
     .trim()
     .prepend(leadingComment + importBlock)
@@ -1816,7 +1829,8 @@ function commonjs(options = {}) {
             )});\n` +
             `export {${name} as __module}`;
         } else {
-          code = `var ${name} = {exports: {}}; export {${name} as __module}`;
+          // bway
+          code = `var exports = {}; var ${name} = {exports}; export {${name} as __module, exports}`;
         }
         return {
           code,
