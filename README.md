@@ -1,3 +1,48 @@
+## 關於分叉
+
+
+[Close issue#908](https://github.com/rollup/plugins/issues/908)
+
+當使用 @web/dev-server 時遇到
+`does not provide an export named "exports"`
+問題，
+且由程式碼邏輯來看臆測問題出於 `@rollup/plugin-commonjs`。
+
+```js
+// commonjs 導出的 pkg.js
+import { __module as xxx, exports as yyy } from "./b.js?commonjs-module"
+
+// commonjs 導出的 pkg.js?...commonjs-module
+var xxx = {exports: {}};
+export {xxx as __module};
+
+// rollup 改寫的
+var xxx = {exports: {}};
+(function(module, exports) {
+...
+})(xxx, xxx.exports);
+```
+
+  * [x] 依 rollup 改寫方式竄改 @rollup/plugin-commonjs 的文件。 (非正式)
+
+```js
+// 最終結果 導出的 pkg.js
+import { __module as xxx } from "./b.js?commonjs-module"
+
+(function(module, exports) {
+...
+})(xxx, xxx.exports);
+
+var yyy = xxx.exports;
+```
+
+
+
+---
+
+
+
+
 [npm]: https://img.shields.io/npm/v/@rollup/plugin-commonjs
 [npm-url]: https://www.npmjs.com/package/@rollup/plugin-commonjs
 [size]: https://packagephobia.now.sh/badge?p=@rollup/plugin-commonjs
