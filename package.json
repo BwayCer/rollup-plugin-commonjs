@@ -1,4 +1,10 @@
 {
+  "name": "@bwaycer/rollup-plugin-commonjs",
+  "version": "21.0.0-alpha.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BwayCer/rollup-plugin-commonjs.git"
+  },
   "author": {
     "name": "Rich Harris",
     "email": "richard.a.harris@gmail.com"
@@ -61,16 +67,11 @@
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.es.js",
-  "name": "@rollup/plugin-commonjs",
   "peerDependencies": {
     "rollup": "^2.38.3"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "repository": {
-    "url": "git+https://github.com/rollup/plugins.git",
-    "directory": "packages/commonjs"
   },
   "scripts": {
     "build": "rollup -c",
@@ -86,6 +87,5 @@
     "test": "ava",
     "test:ts": "tsc types/index.d.ts test/types.ts --noEmit"
   },
-  "types": "types/index.d.ts",
-  "version": "21.0.0"
+  "types": "types/index.d.ts"
 }
