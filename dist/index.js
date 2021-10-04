@@ -1664,11 +1664,22 @@ function transformCommonjs(
   }
 
   // bway
+  // console.log(29, '---')
+  // console.log(291, importBlock)
+  // console.log(29, '---')
+  // console.log(292, magicString.intro)
+  // console.log(29, '---')
+  // console.log(293, magicString.outro)
+  // console.log(29, '---')
+  // console.log(294, exportBlock)
+  // console.log(29, '---')
   magicString
     .trim()
     .prepend(leadingComment + importBlock)
     .append(exportBlock);
 
+  // bway
+  // console.log(magicString.toString())
   return {
     code: magicString.toString(),
     map: sourceMap ? magicString.generateMap() : null,
