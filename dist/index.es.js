@@ -1,4 +1,4 @@
-import { basename, extname, dirname, sep, join, resolve } from 'path';
+import { basename, extname, dirname, join, resolve, sep } from 'path';
 import { makeLegalIdentifier, attachScopes, extractAssignedNames, createFilter } from '@rollup/pluginutils';
 import getCommonDir from 'commondir';
 import { existsSync, readFileSync, statSync } from 'fs';
@@ -151,8 +151,18 @@ export function commonjsRegister (path, loader) {
 	DYNAMIC_REQUIRE_LOADERS[path] = loader;
 }
 
+export function commonjsRegisterOrShort (path, to) {
+	const resolvedPath = commonjsResolveImpl(path, null, true);
+	if (resolvedPath !== null && DYNAMIC_REQUIRE_CACHE[resolvedPath]) {
+	  DYNAMIC_REQUIRE_CACHE[path] = DYNAMIC_REQUIRE_CACHE[resolvedPath];
+	} else {
+	  DYNAMIC_REQUIRE_SHORTS[path] = to;
+	}
+}
+
 const DYNAMIC_REQUIRE_LOADERS = Object.create(null);
 const DYNAMIC_REQUIRE_CACHE = Object.create(null);
+const DYNAMIC_REQUIRE_SHORTS = Object.create(null);
 const DEFAULT_PARENT_MODULE = {
 	id: '<' + 'rollup>', exports: {}, parent: undefined, filename: null, loaded: false, children: [], paths: []
 };
@@ -257,10 +267,13 @@ export function commonjsResolveImpl (path, originalModuleDir, testCache) {
 			const resolvedPath = relPath + CHECKED_EXTENSIONS[extensionIndex];
 			if (DYNAMIC_REQUIRE_CACHE[resolvedPath]) {
 				return resolvedPath;
-			};
+			}
+			if (DYNAMIC_REQUIRE_SHORTS[resolvedPath]) {
+			  return resolvedPath;
+			}
 			if (DYNAMIC_REQUIRE_LOADERS[resolvedPath]) {
 				return resolvedPath;
-			};
+			}
 		}
 		if (!shouldTryNodeModules) break;
 		const nextDir = normalize(originalModuleDir + '/..');
@@ -279,10 +292,17 @@ export function commonjsResolve (path, originalModuleDir) {
 }
 
 export function commonjsRequire (path, originalModuleDir) {
-	const resolvedPath = commonjsResolveImpl(path, originalModuleDir, true);
+	let resolvedPath = commonjsResolveImpl(path, originalModuleDir, true);
 	if (resolvedPath !== null) {
     let cachedModule = DYNAMIC_REQUIRE_CACHE[resolvedPath];
     if (cachedModule) return cachedModule.exports;
+    let shortTo = DYNAMIC_REQUIRE_SHORTS[resolvedPath];
+    if (shortTo) {
+      cachedModule = DYNAMIC_REQUIRE_CACHE[shortTo];
+      if (cachedModule)
+        return cachedModule.exports;
+      resolvedPath = commonjsResolveImpl(shortTo, null, true);
+    }
     const loader = DYNAMIC_REQUIRE_LOADERS[resolvedPath];
     if (loader) {
       DYNAMIC_REQUIRE_CACHE[resolvedPath] = cachedModule = {
@@ -346,8 +366,7 @@ function getName(id) {
   if (name !== 'index') {
     return name;
   }
-  const segments = dirname(id).split(sep);
-  return makeLegalIdentifier(segments[segments.length - 1]);
+  return makeLegalIdentifier(basename(dirname(id)));
 }
 
 function normalizePathSlashes(path) {
@@ -379,15 +398,13 @@ function getPackageEntryPoint(dirPath) {
 }
 
 function getDynamicPackagesModule(dynamicRequireModuleDirPaths, commonDir) {
-  let code = `const commonjsRegister = require('${HELPERS_ID}?commonjsRegister');`;
+  let code = `const commonjsRegisterOrShort = require('${HELPERS_ID}?commonjsRegisterOrShort');`;
   for (const dir of dynamicRequireModuleDirPaths) {
     const entryPoint = getPackageEntryPoint(dir);
 
-    code += `\ncommonjsRegister(${JSON.stringify(
+    code += `\ncommonjsRegisterOrShort(${JSON.stringify(
       getVirtualPathForDynamicRequirePath(dir, commonDir)
-    )}, function (module, exports) {
-  module.exports = require(${JSON.stringify(normalizePathSlashes(join(dir, entryPoint)))});
-});`;
+    )}, ${JSON.stringify(getVirtualPathForDynamicRequirePath(join(dir, entryPoint), commonDir))});`;
   }
   return code;
 }
@@ -759,6 +776,20 @@ function getDefinePropertyCallName(node, targetName) {
 
 function isShorthandProperty(parent) {
   return parent && parent.type === 'Property' && parent.shorthand;
+}
+
+function hasDefineEsmProperty(node) {
+  return node.properties.some((property) => {
+    if (
+      property.type === 'Property' &&
+      property.key.type === 'Identifier' &&
+      property.key.name === '__esModule' &&
+      isTruthy(property.value)
+    ) {
+      return true;
+    }
+    return false;
+  });
 }
 
 function wrapCode(magicString, uses, moduleName, exportsName) {
@@ -1236,6 +1267,18 @@ function transformCommonjs(
               } else if (!firstTopLevelModuleExportsAssignment) {
                 firstTopLevelModuleExportsAssignment = node;
               }
+
+              if (defaultIsModuleExports === false) {
+                shouldWrap = true;
+              } else if (defaultIsModuleExports === 'auto') {
+                if (node.right.type === 'ObjectExpression') {
+                  if (hasDefineEsmProperty(node.right)) {
+                    shouldWrap = true;
+                  }
+                } else if (defaultIsModuleExports === false) {
+                  shouldWrap = true;
+                }
+              }
             } else if (exportName === KEY_COMPILED_ESM) {
               if (programDepth > 3) {
                 shouldWrap = true;
@@ -1660,7 +1703,9 @@ function commonjs(options = {}) {
         ? options.ignoreTryCatch(id)
         : Array.isArray(options.ignoreTryCatch)
         ? options.ignoreTryCatch.includes(id)
-        : options.ignoreTryCatch || false;
+        : typeof options.ignoreTryCatch !== 'undefined'
+        ? options.ignoreTryCatch
+        : true;
 
     return {
       canConvertRequire: mode !== 'remove' && mode !== true,
